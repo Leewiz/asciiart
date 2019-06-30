@@ -1,19 +1,78 @@
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/opencv.hpp>
+#include <ncurses.h>
 #include <iostream>
-#include <windows.h>
-#include <fstream>.
+#include <fstream>
 
+#include <thread>
+#include <chrono>
+
+std::string ascii = "`^\",:;Il!i~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$"; // 67 chars
 std::string type2string(int type);
+void asciify(cv::Mat image);
 typedef std::vector<std::vector<char> > AsciiMatrix;
 
 int main(int argc, char** argv)
 {
-	// creating mat objects to use to experiment with opencv builtin features.
+	// this section gets access to the connected camera
+	cv::Mat frame, smallerFrame;
+	cv::VideoCapture cap;
+	std::string lineFromFile;
+
+	if(!cap.open(0))
+	{
+        return 0;
+	}
+
+	initscr();
+    for(;;)
+    {
+		
+		clear();
+		
+		cap >> frame;
+		cv::resize(frame, smallerFrame, cv::Size(138, 138));
+		asciify(smallerFrame); // writes frame to file
+
+		std::ifstream is ("test.txt", std::ifstream::binary);
+		if (is) 
+		{
+			// get length of file:
+			is.seekg (0, is.end);
+			int length = is.tellg();
+			is.seekg (0, is.beg);
+
+			char * buffer = new char [length];
+
+			// read data as a block:
+			is.read (buffer,length);
+
+			if (is)
+			{
+				addstr(buffer); // print buffer to screen	
+				refresh();
+			}
+			else
+			{
+				std::cout << "error: only " << is.gcount() << " could be read";
+				return 1;
+			}
+			is.close();
+			// ...buffer contains the entire file...
+
+			delete[] buffer;
+		}
+
+		if( frame.empty() ) break; // end of video stream
+		// imshow("this is you, smile! :)", frame); // display camera capture in a window
+		if( cv::waitKey(10) == 27 ) break; // stop capturing by pressing ESC 
+    }
+
+	// create mat objects to use to experiment with opencv builtin features.
 	// "image" is the raw image.
-	cv::Mat image, gray, canny;
-	image = cv::imread("C:/Users/green/Downloads/premium.png");
+	cv::Mat image, smallerImage, gray, canny;
+	image = cv::imread("../test.jpg");
 
 	// make sure an image loaded
 	if (!image.data)
@@ -21,52 +80,17 @@ int main(int argc, char** argv)
 		std::cout << "Could not open or find the image" << std::endl;
 		return -1;
 	}
+	// print some stuff about the image because why not
+	std::cout << image.size() << std::endl; // image dimensions
+	std::cout << image.total() << std::endl; // total number of pixels
+	std::cout << type2string(image.type()) << std::endl; // type of matrix element
 
-	std::cout << image.size() << std::endl;
-	std::cout << image.total() << std::endl;
-	std::cout << type2string(image.type()) << std::endl;
-
-	std::string ascii = "`^\",:;Il!i~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$"; // 67 chars
-	std::ofstream stream;
-	stream.open("test.txt");
-
-	std::vector<char> row(600, '`');
-	AsciiMatrix thePic(600, row);
-
-	//char array[600][600];
-
-	for (int i = 0; i < image.rows; i++)
-	{
-		for (int j = 0; j < image.cols; j++)
-		{
-			double average = 0;
-
-			// get the rgb Vec3 color code for current pixel
-			cv::Vec3b& rgb = image.at<cv::Vec3b>(i,j);
-
-			// calculate average 'brightness' for all 3 colors of this pixel
-			average = (rgb[0] + rgb[1] + rgb[2]) / 3;
-
-			// assign average value to each color. This effectively grayscales the image.
-			//rgb[0] = average;
-			//rgb[1] = average;
-			//rgb[2] = average;
-
-			// assign an ascii character based on the calculated average 'brightness' of the pixel
-			thePic[i][j] = ascii[average / 4];
-
-			// write the character representation of the pixel to file
-			stream << thePic[i][j] << thePic[i][j] << thePic[i][j];
-			if (j == image.cols-1)
-			{
-				stream << "\n";
-			}
-		}
-	}
-	stream.close();
+	// resize the image
+	cv::resize(image, smallerImage, cv::Size(), 0.23, 0.23);
+	
 
 	std::vector<int> compression_params;
-	compression_params.push_back(CV_IMWRITE_PNG_COMPRESSION);
+	compression_params.push_back(cv::IMWRITE_PNG_COMPRESSION);
 	compression_params.push_back(9);
 
 	try
@@ -79,36 +103,11 @@ int main(int argc, char** argv)
 		return 1;
 	}
 
-
-	//if (image.isContinuous())
-	//{
-	//	array.assign(image.data, image.data + image.total());
-	//}
-	//else
-	//{
-	//	for (int i = 0; i < image.rows; i++)
-	//	{
-	//		array.insert(array.end(), image.ptr<uchar>(i), image.ptr<uchar>(i) + image.cols);
-	//	}
-	//}
-
-
-	//for (int i = 0; i < array.size(); i++)
-	//{
-	//	uchar& uxy = array[i];
-	//	int color = (int)uxy;
-	//	std::cout << color << " ";
-
-	//	if (i % 3 == 0)
-	//	{
-	//		std::cout << std::endl;
-	//	}
-	//}
-
+	asciify(smallerImage);
 
 	// testing some opencv features
 	cv::namedWindow("iss", cv::WINDOW_AUTOSIZE);
-	cv::imshow("iss", image); // raw image
+	cv::imshow("iss", smallerImage); // raw image
 
 	// convert color to grayscale
 	cv::cvtColor(image, gray, cv::COLOR_BGR2GRAY);
@@ -147,4 +146,37 @@ std::string type2string(int type)
 	r += (chans + '0');
 
 	return r;
+}
+
+void asciify(cv::Mat image)
+{
+	std::ofstream fstream;
+	fstream.open("test.txt");
+
+	std::vector<char> row(600*.23, '`');
+	AsciiMatrix thePic(600*.23, row);
+	for (int i = 0; i < image.rows; i++)
+	{
+		for (int j = 0; j < image.cols; j++)
+		{
+			double average = 0;
+
+			// get the rgb Vec3 color code for current pixel
+			cv::Vec3b& rgb = image.at<cv::Vec3b>(i,j);
+
+			// calculate average 'brightness' for all 3 colors of this pixel
+			average = (rgb[0] + rgb[1] + rgb[2]) / 3;
+
+			// assign an ascii character based on the calculated average 'brightness' of the pixel
+			thePic[i][j] = ascii[average / 4];
+
+			// write the character representation of the pixel to file
+			fstream << thePic[i][j] << thePic[i][j] << thePic[i][j];
+			if (j == image.cols-1)
+			{
+				fstream << "\n";
+			}
+		}
+	}
+	fstream.close();
 }
